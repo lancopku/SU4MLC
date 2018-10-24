@@ -1,0 +1,25 @@
+data: '/home/linjunyang/multilabel_rcv/save_data'
+log: 'experiments/'
+epoch: 100
+batch_size: 64
+param_init: 0.04
+optim: 'adam'
+learning_rate: 0.0003
+max_grad_norm: 10
+learning_rate_decay: 0.1
+schedule: True
+bidirec: True
+start_decay_at: 2
+emb_size: 512
+encoder_hidden_size: 512
+decoder_hidden_size: 512
+num_layers: 2
+dropout: 0.05
+max_tgt_len: 25
+eval_interval: 500
+save_interval: 3000
+max_generator_batches: 32
+metric: ['hamming_loss', 'macro_f1', 'micro_f1']
+shared_vocab: False
+beam_size: 5
+conv_layers: 1
