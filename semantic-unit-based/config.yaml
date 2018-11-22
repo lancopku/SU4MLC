@@ -8,7 +8,7 @@ attention: 'luong_gate'
 learning_rate: 0.0003
 max_grad_norm: 10
 learning_rate_decay: 0.5
-start_decay_at: 1
+start_decay_at: 2
 emb_size: 512
 hidden_size: 512
 dec_num_layers: 2
