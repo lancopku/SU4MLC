@@ -15,7 +15,7 @@ dec_num_layers: 2
 enc_num_layers: 2
 bidirectional: True
 dropout: 0.2
-max_time_step: 8
+max_time_step: 30
 eval_interval: 500
 save_interval: 1000
 unk: False
