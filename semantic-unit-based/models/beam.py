@@ -1,8 +1,8 @@
 import torch
-import data.dict as dict
+import utils
 
 class Beam(object):
-    def __init__(self, size, n_best=1, cuda=True):
+    def __init__(self, size, n_best=1, cuda=True, length_norm=False, minimum_length=0):
 
         self.size = size
         self.tt = torch.cuda if cuda else torch
@@ -16,11 +16,11 @@ class Beam(object):
 
         # The outputs at each time-step.
         self.nextYs = [self.tt.LongTensor(size)
-                       .fill_(dict.EOS)]
-        self.nextYs[0][0] = dict.BOS
+                       .fill_(utils.EOS)]
+        self.nextYs[0][0] = utils.BOS
 
         # Has EOS topped the beam yet.
-        self._eos = dict.EOS
+        self._eos = utils.EOS
         self.eosTop = False
 
         # The attentions (matrix) for each time.
@@ -29,6 +29,9 @@ class Beam(object):
         # Time and k pair for finished.
         self.finished = []
         self.n_best = n_best
+
+        self.length_norm = length_norm
+        self.minimum_length = minimum_length
 
 
     def getCurrentState(self):
@@ -94,12 +97,14 @@ class Beam(object):
         for i in range(self.nextYs[-1].size(0)):
             if self.nextYs[-1][i] == self._eos:
                 s = self.scores[i]
-                s /= len(self.nextYs)
-                self.finished.append((s, len(self.nextYs) - 1, i))
+                if self.length_norm:
+                    s /= len(self.nextYs)
+                if len(self.nextYs) - 1 >= self.minimum_length:
+                    self.finished.append((s, len(self.nextYs) - 1, i))
 
         # End condition is when top-of-beam is EOS and no global score.
-        if self.nextYs[-1][0] == dict.EOS:
-            # self.allScores.append(self.scores)
+        if self.nextYs[-1][0] == utils.EOS:
+            self.allScores.append(self.scores)
             self.eosTop = True
 
     def done(self):
@@ -111,15 +116,30 @@ class Beam(object):
             a, br, d = e.size()
             e = e.view(a, self.size, br // self.size, d)
             sentStates = e[:, :, idx]
-            sentStates.data.copy_(sentStates.data.index_select(1, positions))
+            sentStates.copy_(sentStates.index_select(1, positions))
 
+    def beam_update_gru(self, state, idx):
+        positions = self.getCurrentOrigin()
+        for e in state:
+            br, d = e.size()
+            e = e.view(self.size, br // self.size, d)
+            sentStates = e[:, idx]
+            sentStates.copy_(sentStates.index_select(0, positions))
+
+    def beam_update_memory(self, state, idx):
+        positions = self.getCurrentOrigin()
+        e = state
+        br, d = e.size()
+        e = e.view(self.size, br // self.size, d)
+        sentStates = e[:, idx]
+        sentStates.copy_(sentStates.index_select(0, positions))
 
     def sortFinished(self, minimum=None):
         if minimum is not None:
             i = 0
             # Add from beam until we have minimum outputs.
             while len(self.finished) < minimum:
-                s = self.scores[i]
+                s = self.scores[i].item()
                 self.finished.append((s, len(self.nextYs) - 1, i))
                 i += 1
 
@@ -134,7 +154,7 @@ class Beam(object):
         """
         hyp, attn = [], []
         for j in range(len(self.prevKs[:timestep]) - 1, -1, -1):
-            hyp.append(self.nextYs[j+1][k])
+            hyp.append(self.nextYs[j+1][k].item())
             attn.append(self.attn[j][k])
-            k = self.prevKs[j][k]
+            k = self.prevKs[j][k].item()
         return hyp[::-1], torch.stack(attn[::-1])

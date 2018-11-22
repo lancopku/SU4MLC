@@ -1,191 +1,90 @@
 import argparse
-import torch
-import data.dict as dict
-from data.dataloader import dataset
+import utils
+import pickle
 
 parser = argparse.ArgumentParser(description='preprocess.py')
 
-##
-## **Preprocess Options**
-##
+parser.add_argument('-load_data', required=True,
+                    help="input file for the data")
 
-parser.add_argument('-config', help="Read options from this file")
-
-parser.add_argument('-train_src', 
-                    default='/home/linjunyang/multilabel_rcv/train.src',
-                    help="Path to the training source data")
-parser.add_argument('-train_tgt', 
-                    default='/home/linjunyang/multilabel_rcv/train.tgt',
-                    help="Path to the training target data")
-parser.add_argument('-valid_src',
-                    default='/home/linjunyang/multilabel_rcv/valid.src',
-                    help="Path to the validation source data")
-parser.add_argument('-valid_tgt', 
-                    default='/home/linjunyang/multilabel_rcv/valid.tgt',
-                    help="Path to the validation target data")
-parser.add_argument('-test_src', 
-                    default='/home/linjunyang/multilabel_rcv/test.src',
-                    help="Path to the validation source data")
-parser.add_argument('-test_tgt', 
-                    default='/home/linjunyang/multilabel_rcv/test.tgt',
-                    help="Path to the validation target data")
-
-parser.add_argument('-save_data', 
-                    default='/home/linjunyang/multilabel_rcv/save_data',
+parser.add_argument('-save_data', required=True,
                     help="Output file for the prepared data")
 
 parser.add_argument('-src_vocab_size', type=int, default=50000,
                     help="Size of the source vocabulary")
-parser.add_argument('-tgt_vocab_size', type=int, default=150,
+parser.add_argument('-tgt_vocab_size', type=int, default=50000,
                     help="Size of the target vocabulary")
-parser.add_argument('-src_vocab', default=None,
-                    help="Path to an existing source vocabulary") # 已经存在的src字典的路径
-parser.add_argument('-tgt_vocab', default=None,
-                    help="Path to an existing target vocabulary")
-
-
-parser.add_argument('-src_length', type=int, default=500,
+parser.add_argument('-src_filter', type=int, default=0,
                     help="Maximum source sequence length")
-parser.add_argument('-tgt_length', type=int, default=25,
+parser.add_argument('-tgt_filter', type=int, default=0,
                     help="Maximum target sequence length")
-parser.add_argument('-shuffle',    type=int, default=0,
-                    help="Shuffle data")
-parser.add_argument('-seed',       type=int, default=3435,
-                    help="Random seed")
+parser.add_argument('-src_trun', type=int, default=0,
+                    help="Truncate source sequence length")
+parser.add_argument('-tgt_trun', type=int, default=0,
+                    help="Truncate target sequence length")
+parser.add_argument('-src_char', action='store_true', help='character based encoding')
+parser.add_argument('-tgt_char', action='store_true', help='character based decoding')
+parser.add_argument('-src_suf', default='src',
+                    help="the suffix of the source filename")
+parser.add_argument('-tgt_suf', default='tgt',
+                    help="the suffix of the target filename")
 
-parser.add_argument('-lower', default = True, action='store_true', help='lowercase data')
-parser.add_argument('-char', default = False, action='store_true', help='replace unk with char')
-parser.add_argument('-share', default = False, action='store_true', help='share the vocabulary between source and target')
+parser.add_argument('-share', action='store_true', help='share the vocabulary between source and target')
 
 parser.add_argument('-report_every', type=int, default=100000,
                     help="Report status every this many sentences")
 
 opt = parser.parse_args()
 
-torch.manual_seed(opt.seed)
 
-def makeVocabulary(filename, size, char=False): 
-    '''
-    Inputs:
-        filename: str, 文本源文件的路径.
-        size: int, 制作的字典的size, 含有单词的个数.
-        char: bool, 是否以字符为单位.
-    Return:
-        Dict对象, 里面有各种方法以及属性里idxToLabel, labelToIdx, frequencies三个字典.
-    '''
+def makeVocabulary(filename, trun_length, filter_length, char, vocab, size):
 
-    # PAD, UNK, BOS, EOS表示是特殊字符. 分别对应0, 1, 2, 3
-    vocab = dict.Dict([dict.PAD_WORD, dict.UNK_WORD,
-                       dict.BOS_WORD, dict.EOS_WORD], lower=opt.lower)
-    if char:
-        vocab.addSpecial(dict.SPA_WORD)
+    print("%s: length limit = %d, truncate length = %d" % (filename, filter_length, trun_length))
+    max_length = 0
+    with open(filename, encoding='utf8') as f:
+        for sent in f.readlines():
+            if char:
+                tokens = list(sent.strip())
+            else:
+                tokens = sent.strip().split()
+            if 0 < filter_length < len(sent.strip().split()):
+                continue
+            max_length = max(max_length, len(tokens))
+            if trun_length > 0:
+                tokens = tokens[:trun_length]
+            for word in tokens:
+                vocab.add(word)
 
-    lengths = []
+    print('Max length of %s = %d' % (filename, max_length))
 
-    if type(filename) == list:
-        for _filename in filename:
-            with open(_filename) as f:
-                for sent in f.readlines():
-                    for word in sent.strip().split():
-                        lengths.append(len(word))
-                        if char:
-                            for ch in word:
-                                vocab.add(ch)
-                        else:
-                            vocab.add(word + " ") # 为什么要加空格？？？？？？？？？？？？？？？？？？
-    else:
-        with open(filename) as f:
-            for sent in f.readlines():
-                for word in sent.strip().split():
-                    lengths.append(len(word))
-                    if char:
-                        for ch in word:
-                            vocab.add(ch)
-                    else:
-                        vocab.add(word+" ")
-    # 单词的最大、最小、平均长度
-    print('max: %d, min: %d, avg: %.2f' % (max(lengths), min(lengths), sum(lengths)/len(lengths)))
+    if size > 0:
+        originalSize = vocab.size()
+        vocab = vocab.prune(size)
+        print('Created dictionary of size %d (pruned from %d)' %
+              (vocab.size(), originalSize))
 
-    originalSize = vocab.size()
-    vocab = vocab.prune(size) # 返回最频繁的size个单词的字典
-    print('Created dictionary of size %d (pruned from %d)' %
-          (vocab.size(), originalSize))
-
-    return vocab
-
-
-def initVocabulary(name, dataFile, vocabFile, vocabSize, char=False):
-    '''
-    Inputs:
-        name: str, 制作的字典的名字.
-        dataFile: str, 文本源文件的路径.
-        vocabFile: str, 已经存在的字典的路径, 每一行的第一列为label，第二列为idx.
-        vocabSize: int, 制作的字典的size, 含有单词的个数.
-        char: bool, 是否以字符为单位.
-    Return:
-        Dict对象, 里面有各种方法以及属性里idxToLabel, labelToIdx, frequencies三个字典.
-    '''
-
-    vocab = None
-    if vocabFile is not None:
-        # If given, load existing word dictionary.
-        print('Reading ' + name + ' vocabulary from \'' + vocabFile + '\'...')
-        vocab = dict.Dict()
-        vocab.loadFile(vocabFile) # 每一行的第一列为label，第二列为idx
-        print('Loaded ' + str(vocab.size()) + ' ' + name + ' words')
-
-    if vocab is None:
-        # If a dictionary is still missing, generate it.
-        print('Building ' + name + ' vocabulary...')
-        genWordVocab = makeVocabulary(dataFile, vocabSize, char=char) # vocab_size为字典的大小
-        vocab = genWordVocab
-
-    print()
     return vocab
 
 
 def saveVocabulary(name, vocab, file):
-    '''
-    Inputs:
-        name: str, 字典的名字
-        vocab: Dict对象
-        file: 文件的名字
-    Return:
-        file, 每一行的第一列表示label, 第二列表示索引.
-    '''
-
     print('Saving ' + name + ' vocabulary to \'' + file + '\'...')
     vocab.writeFile(file)
 
 
-def makeData(srcFile, tgtFile, srcDicts, tgtDicts, sort=False, char=False):
-    '''
-    根据字典将语言文件的单词转为索引值.
-    Inputs:
-        srcFile: str, 源语言文件的文件名
-        tgtFile: str, 目标语言文件的文件名
-        srcDicts: str, 已经做好的源语言的字典
-        tgtDicts: str, 已经做好的目标语言的字典
-        sort: bool, 是否排序
-        char: bool, 是否以字符为单位
-    Return:
-        dataset: 已经封装好的数据集, 含有src, tgt, raw_src, raw_tgt
-        src: list, 每一个元素为一个样本的Torch.LongTensor, 值为索引.
-        tgt: list, 每一个元素为一个样本的Torch.LongTensor, 值为索引.
-        raw_src: list, 每一个元素也为list, 该样本的单词.
-        raw_tgt: list, 每一个元素也为list, 该样本的单词.
-    '''
-
-    src, tgt = [], [] # src, tgt是一个列表，每一个元素是一行索引
-    raw_src, raw_tgt = [], [] # raw_src, raw_tgt是一个列表，每一个元素为一行单词
-    sizes = [] # 每个元素表示该样本含有的单词数量.
-    count, ignored = 0, 0
+def makeData(srcFile, tgtFile, srcDicts, tgtDicts, save_srcFile, save_tgtFile, lim=0):
+    sizes = 0
+    count, empty_ignored, limit_ignored = 0, 0, 0
 
     print('Processing %s & %s ...' % (srcFile, tgtFile))
-    srcF = open(srcFile)
-    tgtF = open(tgtFile)
+    srcF = open(srcFile, encoding='utf8')
+    tgtF = open(tgtFile, encoding='utf8')
 
-    while True: # 每次读取一行
+    srcIdF = open(save_srcFile + '.id', 'w')
+    tgtIdF = open(save_tgtFile + '.id', 'w')
+    srcStrF = open(save_srcFile + '.str', 'w', encoding='utf8')
+    tgtStrF = open(save_tgtFile + '.str', 'w', encoding='utf8')
+
+    while True:
         sline = srcF.readline()
         tline = tgtF.readline()
 
@@ -204,37 +103,41 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts, sort=False, char=False):
         # source and/or target are empty
         if sline == "" or tline == "":
             print('WARNING: ignoring an empty line ('+str(count+1)+')')
-            ignored += 1
+            empty_ignored += 1
             continue
 
-        if opt.lower:
-            sline = sline.lower()
-            tline = tline.lower()
+        sline = sline.lower()
+        tline = tline.lower()
 
-        srcWords = sline.split()
-        tgtWords = tline.split()
+        srcWords = sline.split() if not opt.src_char else list(sline)
+        tgtWords = tline.split() if not opt.tgt_char else list(tline)
 
-        # 
-        if opt.src_length == 0 or (len(srcWords) <= opt.src_length and len(tgtWords) <= opt.tgt_length):
 
-            if char:
-                srcWords = [word + " " for word in srcWords]
-                tgtWords = list(" ".join(tgtWords))
+        if (opt.src_filter == 0 or len(sline.split()) <= opt.src_filter) and \
+           (opt.tgt_filter == 0 or len(tline.split()) <= opt.tgt_filter):
+
+            if opt.src_trun > 0:
+                srcWords = srcWords[:opt.src_trun]
+            if opt.tgt_trun > 0:
+                tgtWords = tgtWords[:opt.tgt_trun]
+
+            srcIds = srcDicts.convertToIdx(srcWords, utils.UNK_WORD)
+            tgtIds = tgtDicts.convertToIdx(tgtWords, utils.UNK_WORD, utils.BOS_WORD, utils.EOS_WORD)
+
+            srcIdF.write(" ".join(list(map(str, srcIds)))+'\n')
+            tgtIdF.write(" ".join(list(map(str, tgtIds)))+'\n')
+            if not opt.src_char:
+                srcStrF.write(" ".join(srcWords)+'\n')
             else:
-                srcWords = [word+" " for word in srcWords[:300]]
-                tgtWords = [word+" " for word in tgtWords]
+                srcStrF.write("".join(srcWords) + '\n')
+            if not opt.tgt_char:
+                tgtStrF.write(" ".join(tgtWords)+'\n')
+            else:
+                tgtStrF.write("".join(tgtWords) + '\n')
 
-            src += [srcDicts.convertToIdx(srcWords,
-                                          dict.UNK_WORD)] # src不用添加BOS和EOS
-            tgt += [tgtDicts.convertToIdx(tgtWords,
-                                          dict.UNK_WORD,
-                                          dict.BOS_WORD,
-                                          dict.EOS_WORD)]
-            raw_src += [srcWords]
-            raw_tgt += [tgtWords]
-            sizes += [len(srcWords)] # sizes对应的是每一行src文本的单词的个数
+            sizes += 1
         else:
-            ignored += 1
+            limit_ignored += 1
 
         count += 1
 
@@ -243,69 +146,65 @@ def makeData(srcFile, tgtFile, srcDicts, tgtDicts, sort=False, char=False):
 
     srcF.close()
     tgtF.close()
+    srcStrF.close()
+    tgtStrF.close()
+    srcIdF.close()
+    tgtIdF.close()
 
-    if opt.shuffle == 1:
-        print('... shuffling sentences')
-        perm = torch.randperm(len(src))
-        src = [src[idx] for idx in perm]
-        tgt = [tgt[idx] for idx in perm]
-        sizes = [sizes[idx] for idx in perm]
-        raw_src = [raw_src[idx] for idx in perm]
-        raw_tgt = [raw_tgt[idx] for idx in perm]
+    print('Prepared %d sentences (%d and %d ignored due to length == 0 or > )' %
+          (sizes, empty_ignored, limit_ignored))
 
-    if sort:
-        print('... sorting sentences by size')
-        _, perm = torch.sort(torch.Tensor(sizes))
-        src = [src[idx] for idx in perm]
-        tgt = [tgt[idx] for idx in perm]
-        raw_src = [raw_src[idx] for idx in perm]
-        raw_tgt = [raw_tgt[idx] for idx in perm]
-
-    print('Prepared %d sentences (%d ignored due to length == 0 or > %d)' %
-          (len(src), ignored, opt.src_length))
-
-    return dataset(src, tgt, raw_src, raw_tgt) # 封装成相应的数据集
+    return {'srcF': save_srcFile + '.id', 'tgtF': save_tgtFile + '.id',
+            'original_srcF': save_srcFile + '.str', 'original_tgtF': save_tgtFile + '.str',
+            'length': sizes}
 
 
 def main():
 
     dicts = {}
+
+    train_src, train_tgt = opt.load_data + 'train.' + opt.src_suf, opt.load_data + 'train.' + opt.tgt_suf
+    valid_src, valid_tgt = opt.load_data + 'valid.' + opt.src_suf, opt.load_data + 'valid.' + opt.tgt_suf
+    test_src, test_tgt = opt.load_data + 'test.' + opt.src_suf, opt.load_data + 'test.' + opt.tgt_suf
+
+    save_train_src, save_train_tgt = opt.save_data + 'train.' + opt.src_suf, opt.save_data + 'train.' + opt.tgt_suf
+    save_valid_src, save_valid_tgt = opt.save_data + 'valid.' + opt.src_suf, opt.save_data + 'valid.' + opt.tgt_suf
+    save_test_src, save_test_tgt = opt.save_data + 'test.' + opt.src_suf, opt.save_data + 'test.' + opt.tgt_suf
+
+    src_dict, tgt_dict = opt.save_data + 'src.dict', opt.save_data + 'tgt.dict'
+
     if opt.share:
-        # 建立源语言的字典dicts['src']和目标语言的字典dicts['tgt']
         assert opt.src_vocab_size == opt.tgt_vocab_size
-        print('share the vocabulary between source and target')
-        dicts['src'] = initVocabulary('source and target',
-                                      [opt.train_src, opt.train_tgt],
-                                      opt.src_vocab,
-                                      opt.src_vocab_size)
-        dicts['tgt'] = dicts['src']
+        print('Building source and target vocabulary...')
+        dicts['src'] = dicts['tgt'] = utils.Dict([utils.PAD_WORD, utils.UNK_WORD, utils.BOS_WORD, utils.EOS_WORD])
+        dicts['src'] = makeVocabulary(train_src, opt.src_trun, opt.src_filter, opt.src_char, dicts['src'], opt.src_vocab_size)
+        dicts['src'] = dicts['tgt'] = makeVocabulary(train_tgt, opt.tgt_trun, opt.tgt_filter, opt.tgt_char, dicts['tgt'], opt.tgt_vocab_size)
     else:
-        dicts['src'] = initVocabulary('source', opt.train_src, opt.src_vocab,
-                                      opt.src_vocab_size)
-        dicts['tgt'] = initVocabulary('target', opt.train_tgt, opt.tgt_vocab,
-                                      opt.tgt_vocab_size, char=opt.char)
+        print('Building source vocabulary...')
+        dicts['src'] = utils.Dict([utils.PAD_WORD, utils.UNK_WORD, utils.BOS_WORD, utils.EOS_WORD])
+        dicts['src'] = makeVocabulary(train_src, opt.src_trun, opt.src_filter, opt.src_char, dicts['src'], opt.src_vocab_size)
+        print('Building target vocabulary...')
+        dicts['tgt'] = utils.Dict([utils.PAD_WORD, utils.UNK_WORD, utils.BOS_WORD, utils.EOS_WORD])
+        dicts['tgt'] = makeVocabulary(train_tgt, opt.tgt_trun, opt.tgt_filter, opt.tgt_char, dicts['tgt'], opt.tgt_vocab_size)
 
     print('Preparing training ...')
-    train = makeData(opt.train_src, opt.train_tgt, dicts['src'], dicts['tgt'], char=opt.char)
+    train = makeData(train_src, train_tgt, dicts['src'], dicts['tgt'], save_train_src, save_train_tgt)
 
     print('Preparing validation ...')
-    valid = makeData(opt.valid_src, opt.valid_tgt, dicts['src'], dicts['tgt'], char=opt.char)
+    valid = makeData(valid_src, valid_tgt, dicts['src'], dicts['tgt'], save_valid_src, save_valid_tgt)
 
     print('Preparing test ...')
-    test = makeData(opt.test_src, opt.test_tgt, dicts['src'], dicts['tgt'], char=opt.char)
+    test = makeData(test_src, test_tgt, dicts['src'], dicts['tgt'], save_test_src, save_test_tgt)
 
-    if opt.src_vocab is None:
-        saveVocabulary('source', dicts['src'], opt.save_data + '.src.dict')
-    if opt.tgt_vocab is None:
-        saveVocabulary('target', dicts['tgt'], opt.save_data + '.tgt.dict')
+    print('Saving source vocabulary to \'' + src_dict + '\'...')
+    dicts['src'].writeFile(src_dict)
 
+    print('Saving source vocabulary to \'' + tgt_dict + '\'...')
+    dicts['tgt'].writeFile(tgt_dict)
 
-    print('Saving data to \'' + opt.save_data + '.train.pt\'...')
-    save_data = {'dicts': dicts,
-                 'train': train,
-                 'valid': valid,
-                 'test': test}
-    torch.save(save_data, opt.save_data) # torch.save将这个对象保存进去
+    data = {'train': train, 'valid': valid,
+             'test': test, 'dict': dicts}
+    pickle.dump(data, open(opt.save_data+'data.pkl', 'wb'))
 
 
 if __name__ == "__main__":
