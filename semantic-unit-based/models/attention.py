@@ -35,10 +35,10 @@ class luong_gate_attention(nn.Module):
         self.hidden_size, self.emb_size = hidden_size, emb_size
         self.linear_in_conv = nn.Linear(hidden_size, hidden_size)
         self.linear_out_conv = nn.Linear(2*hidden_size, hidden_size)
-        self.selu_out_conv = nn.Sequential(nn.SELU(), nn.AlphaDropout(p=0.05))
+        self.selu_out_conv = nn.Sequential(nn.SELU())
         self.linear_in = nn.Linear(hidden_size, hidden_size)
         self.linear_out = nn.Linear(2*hidden_size, hidden_size)
-        self.selu_out = nn.Sequential(nn.SELU(), nn.AlphaDropout(p=0.05))
+        self.selu_out = nn.Sequential(nn.SELU())
         self.softmax = nn.Softmax(dim=1)
 
     def init_context(self, context):
