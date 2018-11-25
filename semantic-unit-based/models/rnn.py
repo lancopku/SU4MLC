@@ -23,11 +23,11 @@ class rnn_encoder(nn.Module):
                                num_layers=config.enc_num_layers, dropout=config.dropout,
                                bidirectional=config.bidirectional)
 
-        self.dconv = nn.Sequential(nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=2, padding=1, dilation=1), 
+        self.dconv = nn.Sequential(nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1, dilation=1), 
                                    nn.SELU(), nn.AlphaDropout(p=0.05), 
                                    nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1, dilation=2), 
                                    nn.SELU(), nn.AlphaDropout(p=0.05),  
-                                   nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=4, padding=1, dilation=3), 
+                                   nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1, dilation=3), 
                                    nn.SELU(), nn.AlphaDropout(p=0.05))
         self.linear = nn.Linear(2*config.hidden_size, 2*config.hidden_size)
         self.glu = nn.GLU()

@@ -10,6 +10,11 @@ Code for the article "Semantic-Unit-Based Dilated Convolution for Multi-Label Te
 
 **************************************************************
 
+## Data
+Our preprocessed dataset can be retrieved through [this link](https://drive.google.com/open?id=1oQ5_gPoRwAl7UGWTDNu4qATNtJ1l1kXd).
+
+***************************************************************
+
 ## Preprocessing
 ```
 python3 preprocess.py -load_data path_to_data -save_data path_to_store_data 

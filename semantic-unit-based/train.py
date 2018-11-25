@@ -20,7 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-
+import random
 
 parser = argparse.ArgumentParser(description='train.py')
 opts.model_opts(parser)
@@ -28,6 +28,8 @@ opts.model_opts(parser)
 opt = parser.parse_args()
 config = utils.read_config(opt.config)
 torch.manual_seed(opt.seed)
+random.seed(opt.seed)
+np.random.seed(opt.seed)
 opts.convert_to_config(opt, config)
 
 # cuda
@@ -36,7 +38,7 @@ config.use_cuda = use_cuda
 if use_cuda:
     torch.cuda.set_device(opt.gpus[0])
     torch.cuda.manual_seed(opt.seed)
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = True
 
 with open(opt.label_dict_file, 'r') as f:
     label_dict = json.load(f)
