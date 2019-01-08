@@ -11,21 +11,21 @@ Code for the article "Semantic-Unit-Based Dilated Convolution for Multi-Label Te
 **************************************************************
 
 ## Data
-Our preprocessed RCV1-V2 dataset can be retrieved through [this link](https://drive.google.com/open?id=1oQ5_gPoRwAl7UGWTDNu4qATNtJ1l1kXd).
+Our preprocessed RCV1-V2 dataset can be retrieved through [this link](https://drive.google.com/open?id=1oQ5_gPoRwAl7UGWTDNu4qATNtJ1l1kXd). (The json file of label set for evaluation is added for convenience.)
 
 ***************************************************************
 
 ## Preprocessing
 ```
-python3 preprocess.py -load_data path_to_data -save_data path_to_store_data 
+python3 preprocess.py -load_data path_to_data -save_data path_to_store_data (-src_filter 500)
 ```
-Remember to put the data into a folder and name them *train.src*, *train.tgt*, *valid.src*, *valid.tgt*, *test.src* and *test.tgt*, and make a new folder inside called *data*
+Remember to put the data (plain text file) into a folder and name them *train.src*, *train.tgt*, *valid.src*, *valid.tgt*, *test.src* and *test.tgt*, and make a new folder inside called *data*. 
 
 ***************************************************************
 
 ## Training
 ```
-python3 train.py -log log_name -config config_yaml -gpus id
+python3 train.py -log log_name -config config_yaml -gpus id (-label_dict_file path to your label set)
 ```
 Create your own yaml file for hyperparameter setting.
 

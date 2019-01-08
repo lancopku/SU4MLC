@@ -28,7 +28,7 @@ def model_opts(parser):
     parser.add_argument('-max_split', type=int, default=0, help="max generator time steps for memory efficiency")
     parser.add_argument('-split_num', type=int, default=0, help="split number for splitres")
     parser.add_argument('-pretrain', default='', type=str, help="load pretrain encoder")
-    parser.add_argument('-label_dict_file', default='/home/linjunyang/multilabel_rcv/topic_sorted.json', type=str,
+    parser.add_argument('-label_dict_file', default='~/multilabel_rcv/topic_sorted.json', type=str,
                         help="label_dict")
 
 
